@@ -14,8 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SOLANA_CLI_VERSION: 1.18.17
-      ANCHOR_VERSION: 0.30.1 # Adjust to your local Anchor version
-    
+      ANCHOR_VERSION: 0.30.1
+      # Map secrets to environment variables for security
+      DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
+      SOLANA_RPC_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -34,33 +37,32 @@ jobs:
           avm install ${{ env.ANCHOR_VERSION }}
           avm use ${{ env.ANCHOR_VERSION }}
 
-      - name: Setup Keypair
+      - name: Setup Deployer Keypair
         run: |
-          echo "${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}" > deployer.json
+          # Create a temporary file for the keypair using the env var
+          echo "$DEPLOYER_KEYPAIR" > deployer.json
           chmod 600 deployer.json
           
-          # Now safe to run solana-keygen because Solana CLI is installed
-          solana config set --url ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
+          # Configure Solana to use this keypair and the correct RPC URL
+          solana config set --url $SOLANA_RPC_URL
           solana config set --keypair ./deployer.json
 
       - name: Build Program
         run: |
           anchor build
-      
-      # This extracts the Program ID from your Anchor.toml and Keypair
+
       - name: Get Program ID
         id: program_id
         run: |
-          # Assuming standard anchor structure
+          # This gets the ID from the keypair generated during build
           PROGRAM_ID=$(solana-keygen pubkey target/deploy/first_solana_program-keypair.json)
-          echo "PROGRAM_ID=$PROGRAM_ID" >> $GITHUB_ENV
-          echo "Program ID is: $PROGRAM_ID"
+          echo "Generated Program ID: $PROGRAM_ID"
 
       - name: Deploy to Devnet
         run: |
           echo "Deploying program..."
           solana program deploy \
             --program-id ./target/deploy/first_solana_program-keypair.json \
-            --url ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }} \
+            --url $SOLANA_RPC_URL \
             --keypair ./deployer.json \
             target/deploy/first_solana_program.so
