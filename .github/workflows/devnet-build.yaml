@@ -10,43 +10,57 @@ on:
         type: string
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    env:
+      SOLANA_CLI_VERSION: 1.18.17
+      ANCHOR_VERSION: 0.30.1 # Adjust to your local Anchor version
+    
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install Solana CLI
-        uses: solana-developers/actions@v0.2.0
-        with:
-          solana-version: "1.18.0"
-      
-      - name: Extract deployer address
         run: |
-          echo "Using network: devnet"
-          if [ -z "${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}" ]; then
-            echo "Error: DEVNET_DEPLOYER_KEYPAIR is required"
-            exit 1
-          fi
-          echo "${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}" > deployer-keypair.json
-          DEPLOYER_ADDRESS=$(solana-keygen pubkey deployer-keypair.json)
-          echo "Extracted devnet deployer address: $DEPLOYER_ADDRESS"
-          echo "DEPLOYER_ADDRESS=$DEPLOYER_ADDRESS" >> $GITHUB_ENV
-          rm deployer-keypair.json
-        env:
-          DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
+          sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_CLI_VERSION }}/install)"
+          echo "/home/runner/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Setup Keypair
+        run: |
+          echo "${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}" > deployer.json
+          chmod 600 deployer.json
+          
+          # Now safe to run solana-keygen because Solana CLI is installed
+          solana config set --url ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
+          solana config set --keypair ./deployer.json
+
+      - name: Build Program
+        run: |
+          anchor build
       
-      - name: Build and Deploy
-        uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.2.9
-        with:
-          program: "first-solana-program"
-          program-id: "koP6s2ftoKx9G1yqH5xSgAtq7xWvmbbzcFoVXe3zivT"
-          network: "devnet"
-          deploy: true
-          upload_idl: true
-          verify: false
-          use-squads: false
-          priority-fee: ${{ github.event.inputs.priority_fee }}
-        secrets:
-          DEVNET_SOLANA_DEPLOY_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
-          DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
-          PROGRAM_ADDRESS_KEYPAIR: ${{ secrets.PROGRAM_ADDRESS_KEYPAIR }}
+      # This extracts the Program ID from your Anchor.toml and Keypair
+      - name: Get Program ID
+        id: program_id
+        run: |
+          # Assuming standard anchor structure
+          PROGRAM_ID=$(solana-keygen pubkey target/deploy/first_solana_program-keypair.json)
+          echo "PROGRAM_ID=$PROGRAM_ID" >> $GITHUB_ENV
+          echo "Program ID is: $PROGRAM_ID"
+
+      - name: Deploy to Devnet
+        run: |
+          echo "Deploying program..."
+          solana program deploy \
+            --program-id ./target/deploy/first_solana_program-keypair.json \
+            --url ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }} \
+            --keypair ./deployer.json \
+            target/deploy/first_solana_program.so
