@@ -11,17 +11,42 @@ on:
 
 jobs:
   build:
-    uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.2.9
-    with:
-      program: "first-solana-program"
-      program-id: "koP6s2ftoKx9G1yqH5xSgAtq7xWvmbbzcFoVXe3zivT"
-      network: "devnet"
-      deploy: true
-      upload_idl: true
-      verify: false
-      use-squads: false
-      priority-fee: ${{ github.event.inputs.priority_fee }}
-    secrets:
-      DEVNET_SOLANA_DEPLOY_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
-      DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
-      PROGRAM_ADDRESS_KEYPAIR: ${{ secrets.PROGRAM_ADDRESS_KEYPAIR }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Solana CLI
+        uses: solana-developers/actions@v0.2.0
+        with:
+          solana-version: "1.18.0"
+      
+      - name: Extract deployer address
+        run: |
+          echo "Using network: devnet"
+          if [ -z "${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}" ]; then
+            echo "Error: DEVNET_DEPLOYER_KEYPAIR is required"
+            exit 1
+          fi
+          echo "${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}" > deployer-keypair.json
+          DEPLOYER_ADDRESS=$(solana-keygen pubkey deployer-keypair.json)
+          echo "Extracted devnet deployer address: $DEPLOYER_ADDRESS"
+          echo "DEPLOYER_ADDRESS=$DEPLOYER_ADDRESS" >> $GITHUB_ENV
+          rm deployer-keypair.json
+        env:
+          DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
+      
+      - name: Build and Deploy
+        uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.2.9
+        with:
+          program: "first-solana-program"
+          program-id: "koP6s2ftoKx9G1yqH5xSgAtq7xWvmbbzcFoVXe3zivT"
+          network: "devnet"
+          deploy: true
+          upload_idl: true
+          verify: false
+          use-squads: false
+          priority-fee: ${{ github.event.inputs.priority_fee }}
+        secrets:
+          DEVNET_SOLANA_DEPLOY_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
+          DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
+          PROGRAM_ADDRESS_KEYPAIR: ${{ secrets.PROGRAM_ADDRESS_KEYPAIR }}
