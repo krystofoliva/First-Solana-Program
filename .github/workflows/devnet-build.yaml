@@ -10,28 +10,18 @@ on:
         type: string
 
 jobs:
-  build-and-deploy:
-    # We use the latest version (main) to avoid the "build-sbf" cache bug you saw earlier
-    uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@main
+  build:
+    uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@v0.2.9
     with:
-      # CRITICAL: This must match the folder name in your 'programs/' directory
-      program: "first-solana-program" 
-      
-      # CRITICAL: This must match the address in your Anchor.toml
-      program-id: "koP6s2ftoKx9G1yqH5xSgAtq7xWvmbbzcFoVXe3zivT"
-      
+      program: "hello_world"
+      program-id: "YOUR_PROGRAM_ID"
       network: "devnet"
       deploy: true
       upload_idl: true
       verify: false
       use-squads: false
-      priority-fee: ${{ inputs.priority_fee }}
-      
-      # Adjust this to the anchor version you are using locally
-      anchor-version: "0.32.1"
+      priority-fee: ${{ github.event.inputs.priority_fee }}
     secrets:
-      # Ensure these 3 secrets are set in GitHub Settings -> Secrets and Variables -> Actions
       DEVNET_SOLANA_DEPLOY_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
       DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
-      # If you don't have a specific address keypair, you can usually omit this or use the deployer
       PROGRAM_ADDRESS_KEYPAIR: ${{ secrets.PROGRAM_ADDRESS_KEYPAIR }}
