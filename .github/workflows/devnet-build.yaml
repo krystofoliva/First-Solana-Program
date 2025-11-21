@@ -10,62 +10,28 @@ on:
         type: string
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    env:
-      SOLANA_CLI_VERSION: 1.18.17
-      ANCHOR_VERSION: 0.30.1
-      DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
-      SOLANA_RPC_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Solana CLI
-        run: |
-          sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_CLI_VERSION }}/install)"
-          echo "/home/runner/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-
-      # FIX: Download pre-compiled binary instead of compiling with AVM
-      - name: Install Anchor CLI
-        run: |
-          echo "Downloading Anchor v${{ env.ANCHOR_VERSION }}..."
-          wget https://github.com/coral-xyz/anchor/releases/download/v${{ env.ANCHOR_VERSION }}/anchor-cli-v${{ env.ANCHOR_VERSION }}-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf anchor-cli-v${{ env.ANCHOR_VERSION }}-x86_64-unknown-linux-gnu.tar.gz
-          
-          # Move to a location in PATH (Cargo bin is already in PATH from previous steps)
-          mv anchor /home/runner/.cargo/bin/anchor
-          
-          # Verify installation
-          anchor --version
-
-      - name: Setup Deployer Keypair
-        run: |
-          echo "$DEPLOYER_KEYPAIR" > deployer.json
-          chmod 600 deployer.json
-          
-          solana config set --url $SOLANA_RPC_URL
-          solana config set --keypair ./deployer.json
-
-      - name: Build Program
-        run: |
-          anchor build
-
-      - name: Get Program ID
-        id: program_id
-        run: |
-          PROGRAM_ID=$(solana-keygen pubkey target/deploy/first_solana_program-keypair.json)
-          echo "Generated Program ID: $PROGRAM_ID"
-
-      - name: Deploy to Devnet
-        run: |
-          echo "Deploying program..."
-          solana program deploy \
-            --program-id ./target/deploy/first_solana_program-keypair.json \
-            --url $SOLANA_RPC_URL \
-            --keypair ./deployer.json \
-            target/deploy/first_solana_program.so
+  build-and-deploy:
+    # We use the latest version (main) to avoid the "build-sbf" cache bug you saw earlier
+    uses: solana-developers/github-workflows/.github/workflows/reusable-build.yaml@main
+    with:
+      # CRITICAL: This must match the folder name in your 'programs/' directory
+      program: "first-solana-program" 
+      
+      # CRITICAL: This must match the address in your Anchor.toml
+      program-id: "koP6s2ftoKx9G1yqH5xSgAtq7xWvmbbzcFoVXe3zivT"
+      
+      network: "devnet"
+      deploy: true
+      upload_idl: true
+      verify: false
+      use-squads: false
+      priority-fee: ${{ inputs.priority_fee }}
+      
+      # Adjust this to the anchor version you are using locally
+      anchor-version: "0.32.1"
+    secrets:
+      # Ensure these 3 secrets are set in GitHub Settings -> Secrets and Variables -> Actions
+      DEVNET_SOLANA_DEPLOY_URL: ${{ secrets.DEVNET_SOLANA_DEPLOY_URL }}
+      DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
+      # If you don't have a specific address keypair, you can usually omit this or use the deployer
+      PROGRAM_ADDRESS_KEYPAIR: ${{ secrets.PROGRAM_ADDRESS_KEYPAIR }}
